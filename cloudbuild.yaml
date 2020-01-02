@@ -1,0 +1,66 @@
+steps:
+# Grab custom git container dockerfile, entrypoint script,
+# and encrypted ssh key from GCS bucket
+- id: Pull build files from GCS bucket
+  name: gcr.io/cloud-builders/gsutil
+  args: ["cp","-r","gs://toninos-hugo-bucket","."]
+
+- id: Decrypt ssh key
+  name: gcr.io/cloud-builders/gcloud
+  args:
+  - kms
+  - decrypt
+  - --ciphertext-file=${_BUCKET_DIR}/my_key.enc
+  - --plaintext-file=${_BUCKET_DIR}/my_key
+  - --location=us-east1
+  - --keyring=hugo-keyring
+  - --key=hugo-key
+
+- id: Build custom git container (contains key)
+  name: gcr.io/cloud-builders/docker
+  args: ["build","-t","${_GIT_IMAGE}","-f","${_BUCKET_DIR}/git.dockerfile","${_BUCKET_DIR}"]
+
+- id: Git clone content repo
+  name: ${_GIT_IMAGE}
+  args: ["clone","git@github.com:tunzor/github-blog-hugo.git","content"]
+
+- id: Git clone publication repo
+  name: ${_GIT_IMAGE}
+  args: ["clone","git@github.com:tunzor/tunzor.github.io.git","publish"]
+
+# - id: Build hugo cloud-builder
+#   name: gcr.io/cloud-builders/docker
+#   args: ["build", "-t","${_HUGO_IMAGE}","-f","${_BUCKET_DIR}/hugo.dockerfile","${_BUCKET_DIR}"]
+
+# Run hugo to generate site; output to publish repo from above
+- id: Run hugo and output to publication repo
+  name: gcr.io/toninos-hugo-blog/hugo-builder
+  dir: "content"
+  args: ["-d","${_WS}/publish"]
+
+- id: Git status (publication repo)
+  name: gcr.io/cloud-builders/git
+  args: ["-C","${_WS}/publish","status"]
+
+- id: Git add . (publication repo)
+  name: ${_GIT_IMAGE}
+  args: ["-C","${_WS}/publish","add", "."]
+
+- id: Get content commit message and write to file
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args: ["-c","echo Content commit: $(git -C ${_WS}/content log --format=%B -n 1) > ${_WS}/message"]
+
+- id: Git commit
+  name: ${_GIT_IMAGE}
+  args: ["-C","${_WS}/publish","commit", "-F", "${_WS}/message"]
+
+- id: Git push
+  name: ${_GIT_IMAGE}
+  args: ["-C","${_WS}/publish","push"]
+
+substitutions:
+    _GIT_IMAGE: custom-git
+    _BUCKET_DIR: toninos-hugo-bucket
+    # _HUGO_IMAGE: hugo-builder
+    _WS: /workspace
