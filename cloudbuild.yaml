@@ -22,45 +22,48 @@ steps:
 
 - id: Git clone content repo
   name: ${_GIT_IMAGE}
-  args: ["clone","git@github.com:tunzor/github-blog-hugo.git","content"]
+  args: ["clone","git@github.com:tunzor/github-blog-hugo.git","${_CONTENT_DIR}"]
 
 - id: Git clone publication repo
   name: ${_GIT_IMAGE}
-  args: ["clone","git@github.com:tunzor/tunzor.github.io.git","publish"]
+  args: ["clone","git@github.com:tunzor/tunzor.github.io.git","${_PUBLICATION_DIR}"]
 
-# - id: Build hugo cloud-builder
-#   name: gcr.io/cloud-builders/docker
-#   args: ["build", "-t","${_HUGO_IMAGE}","-f","${_BUCKET_DIR}/hugo.dockerfile","${_BUCKET_DIR}"]
+# Can also be built separately and pushed to GCR
+- id: Build hugo cloud-builder
+  name: gcr.io/cloud-builders/docker
+  args: ["build", "-t","${_HUGO_IMAGE}","-f","${_BUCKET_DIR}/hugo.dockerfile","${_BUCKET_DIR}"]
 
 # Run hugo to generate site; output to publish repo from above
 - id: Run hugo and output to publication repo
-  name: gcr.io/toninos-hugo-blog/hugo-builder
-  dir: "content"
-  args: ["-d","${_WS}/publish"]
+  name: ${_HUGO_IMAGE}
+  dir: "${_CONTENT_DIR}"
+  args: ["-d","${_WS}/${_PUBLICATION_DIR}"]
 
 - id: Git status (publication repo)
   name: gcr.io/cloud-builders/git
-  args: ["-C","${_WS}/publish","status"]
+  args: ["-C","${_WS}/${_PUBLICATION_DIR}","status"]
 
 - id: Git add . (publication repo)
   name: ${_GIT_IMAGE}
-  args: ["-C","${_WS}/publish","add", "."]
+  args: ["-C","${_WS}/${_PUBLICATION_DIR}","add", "."]
 
 - id: Get content commit message and write to file
   name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
-  args: ["-c","echo Content commit: $(git -C ${_WS}/content log --format=%B -n 1) > ${_WS}/message"]
+  args: ["-c","echo Content commit: $(git -C ${_WS}/${_CONTENT_DIR} log --format=%B -n 1) > ${_WS}/message"]
 
 - id: Git commit
   name: ${_GIT_IMAGE}
-  args: ["-C","${_WS}/publish","commit", "-F", "${_WS}/message"]
+  args: ["-C","${_WS}/${_PUBLICATION_DIR}","commit", "-F", "${_WS}/message"]
 
 - id: Git push
   name: ${_GIT_IMAGE}
-  args: ["-C","${_WS}/publish","push"]
+  args: ["-C","${_WS}/${_PUBLICATION_DIR}","push"]
 
 substitutions:
     _GIT_IMAGE: custom-git
     _BUCKET_DIR: toninos-hugo-bucket
-    # _HUGO_IMAGE: hugo-builder
+    _HUGO_IMAGE: hugo-builder
     _WS: /workspace
+    _CONTENT_DIR: content-repo
+    _PUBLICATION_DIR: publication-repo
