@@ -1,5 +1,5 @@
 steps:
-# Grab custom git container dockerfile, entrypoint script,
+# Grab dockerfiles, entrypoint script,
 # and encrypted ssh key from GCS bucket
 - id: Pull build files from GCS bucket
   name: gcr.io/cloud-builders/gsutil
